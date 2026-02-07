@@ -1,0 +1,6 @@
+plan.md
+notebooks/.ipynb_checkpoints/
+notebooks/__pycache__/
+notebooks/__pycache__/utils.cpython-39.pyc
+notebooks/.ipynb_checkpoints/utils-checkpoint.py
+notebooks/.ipynb_checkpoints/Model_Building_and_Evaluation-checkpoint.ipynb
