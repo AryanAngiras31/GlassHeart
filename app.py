@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import joblib
+
 import shap
 import matplotlib.pyplot as plt
 import numpy as np
@@ -121,7 +122,7 @@ with tab_dashboard:
 
     # --- PREDICTION ---
     st.markdown("###")
-    if st.button("Calculate Risk Profile", type="primary", use_container_width=True):
+    if st.button("Calculate Risk Profile", type="primary", width="stretch"):
         
         # 1. Prepare Data
         df_input = pd.DataFrame([input_data])[feature_order]
@@ -177,12 +178,12 @@ with tab_dashboard:
                 explainer = shap.TreeExplainer(model_step)
                 shap_values = explainer(input_scaled_df)
                 
-                # 5. Fix visualization names (Map scaled values back to raw inputs for display)
-                shap_values.data = df_input.values # Show raw values in plot (e.g. Age=60, not Age=0.5)
+                sv = shap_values[0, :, 1]          # sample 0, all features, class 1
+                sv.data = df_input.iloc[0].values
                 
                 # 6. Plot
                 fig, ax = plt.subplots()
-                shap.plots.waterfall(shap_values[0, 1], max_display=7, show=False)
+                shap.plots.waterfall(sv, max_display=7, show=False)
                 st.pyplot(fig)
                 
             except Exception as e:
@@ -198,40 +199,37 @@ with tab_evidence:
     features add incremental value and probabilities are calibrated.
     """)
 
-    col_stats, col_calib = st.columns(2)
+    st.subheader("1. Feature Ladder (Hypothesis Testing)")
+    st.write("Likelihood Ratio Tests verifying incremental value of features.")
+    
+    if evidence_data['ladder'] is not None:
+        # Highlight significant p-values
+        def highlight_sig(s):
+            return ['background-color: #12b207' if v < 0.05 else '' for v in s]
+        st.dataframe(
+            evidence_data['ladder'].style.apply(highlight_sig, subset=['LR_p_value']),
+            width = 'stretch'
+        )
+        st.caption("Green rows indicate features that added statistically significant predictive power (p < 0.05).")
+    else:
+        st.warning("Ladder validation CSV not found in reports/tables/")
 
-    with col_stats:
-        st.subheader("1. Feature Ladder (Hypothesis Testing)")
-        st.write("Likelihood Ratio Tests verifying incremental value of features.")
-        
-        if evidence_data['ladder'] is not None:
-            # Highlight significant p-values
-            def highlight_sig(s):
-                return ['background-color: #d1fae5' if v < 0.05 else '' for v in s]
+    st.divider()
 
-            st.dataframe(
-                evidence_data['ladder'].style.apply(highlight_sig, subset=['LR_p_value']),
-                width = 'stretch'
-            )
-            st.caption("Green rows indicate features that added statistically significant predictive power (p < 0.05).")
-        else:
-            st.warning("Ladder validation CSV not found in reports/tables/")
-
-    with col_calib:
-        st.subheader("2. Model Calibration")
-        st.write("Comparison of predicted probabilities vs. observed mortality.")
-        
-        try:
-            st.image("reports/figures/calibration_curves_calibrated.png", caption="Isotonic Regression Calibration", use_container_width=True)
-        except:
-            st.warning("Calibration image not found in reports/figures/")
+    st.subheader("2. Model Calibration")
+    st.write("Comparison of predicted probabilities vs. observed mortality.")
+    
+    try:
+        st.image("reports/figures/calibration_curves_calibrated.png", caption="Isotonic Regression Calibration", width='content')
+    except:
+        st.warning("Calibration image not found in reports/figures/")
 
     st.divider()
     
     st.subheader("3. Global Feature Importance")
     st.markdown("Derived from SHAP Summary analysis on the validation cohort.")
-    # Assuming you have a saved summary plot. If not, generate one in your notebook and save it.
+
     try:
-        st.image("reports/figures/numerical_feature_analysis.png", caption="Feature Distributions", width=600)
+        st.image("reports/figures/numerical_feature_analysis.png", caption="Feature Distributions", width='content')
     except:
         st.info("Feature analysis plot not available.")
