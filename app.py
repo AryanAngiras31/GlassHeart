@@ -63,11 +63,10 @@ with tab_dashboard:
     col_ctrl, col_form = st.columns([1, 3])
     
     with col_ctrl:
-        st.info("Select protocol depth:")
-        model_choice = st.radio(
+        model_choice = st.segmented_control(
             "Protocol",
             ["Triage Mode", "Clinical Mode"],
-            captions=["Vitals Only", "Full Lab Panel"]
+            default="Triage Mode"
         )
 
     st.divider()
@@ -182,8 +181,18 @@ with tab_dashboard:
                 sv.data = df_input.iloc[0].values
                 
                 # 6. Plot
+                plt.style.use("dark_background")
                 fig, ax = plt.subplots()
-                shap.plots.waterfall(sv, max_display=7, show=False)
+                shap.decision_plot(
+                    base_value=sv.base_values,
+                    shap_values=sv.values,
+                    features=sv.data,
+                    feature_names=feature_order,
+                    show=False
+                )
+                ax = plt.gca()
+                ax.tick_params(axis="y", colors="white")
+                ax.tick_params(axis="x", colors="white")
                 st.pyplot(fig)
                 
             except Exception as e:
