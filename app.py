@@ -32,16 +32,19 @@ if not clinical_model or not triage_model:
 # ---------------------------------------------------------
 # 3. HEADER & MODEL SELECTION
 # ---------------------------------------------------------
-st.title("❤️ GlassHeart CDSS")
-st.markdown("### Heart Failure Mortality Risk Assessment")
+col1, col2 = st.columns([2, 1], vertical_alignment="bottom")
 
-# Top-level Choice
-model_choice = st.radio(
-    "Select Assessment Protocol:",
-    ("Triage Mode (Rapid Assessment)", "Clinical Mode (Full Diagnostic)"),
-    horizontal=True,
-    help="Clinical Mode uses lab results (Creatinine, Sodium, CPK). Triage Mode uses only vitals and history."
-)
+with col1:
+    st.title("❤️ GlassHeart CDSS")
+    st.markdown("### Heart Failure Mortality Risk Assessment")
+
+with col2:
+    model_choice = st.segmented_control(
+        "Assessment Protocol",
+        options=["Triage Mode", "Clinical Mode"],
+        default="Triage Mode",
+        help="Select the assessment depth."
+    )
 
 st.divider()
 
