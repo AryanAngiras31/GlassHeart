@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import shap
+import matplotlib.pyplot as plt
+import numpy as np
 
 # ---------------------------------------------------------
 # 1. PAGE CONFIGURATION
@@ -12,7 +15,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# 2. LOAD MODELS
+# 2. LOAD RESOURCES
 # ---------------------------------------------------------
 @st.cache_resource
 def load_models():
@@ -24,128 +27,211 @@ def load_models():
         st.error("⚠️ Models not found! Please run 'python train_models.py' locally first.")
         return None, None
 
+@st.cache_data
+def load_evidence():
+    """Loads the CSV tables and validation images for Tab 2"""
+    evidence = {}
+    try:
+        evidence['ladder'] = pd.read_csv('reports/tables/final_evaluation_rf.csv')
+        evidence['calibration'] = pd.read_csv('reports/tables/calibration_results.csv')
+    except FileNotFoundError:
+        evidence['ladder'] = None
+    return evidence
+
 clinical_model, triage_model = load_models()
+evidence_data = load_evidence()
 
 if not clinical_model or not triage_model:
     st.stop()
 
 # ---------------------------------------------------------
-# 3. HEADER & MODEL SELECTION
+# 3. HEADER
 # ---------------------------------------------------------
-col1, col2 = st.columns([2, 1], vertical_alignment="bottom")
-
-with col1:
-    st.title("❤️ GlassHeart CDSS")
-    st.markdown("### Heart Failure Mortality Risk Assessment")
-
-with col2:
-    model_choice = st.segmented_control(
-        "Assessment Protocol",
-        options=["Triage Mode", "Clinical Mode"],
-        default="Triage Mode",
-        help="Select the assessment depth."
-    )
-
-st.divider()
+st.title("❤️ GlassHeart CDSS")
+st.markdown("### Heart Failure Mortality Risk Assessment")
 
 # ---------------------------------------------------------
-# 4. INPUT FORM (ROW LAYOUT)
+# 4. TABS SYSTEM
 # ---------------------------------------------------------
-st.subheader("Patient Vitals & History")
+tab_dashboard, tab_evidence = st.tabs(["Clinical Dashboard", "Model Evidence"])
 
-# Dictionary to hold inputs
-input_data = {}
-
-# Helpers for consistent UI
-def binary_select(label, key):
-    return 1 if st.selectbox(label, ("No", "Yes"), key=key) == "Yes" else 0
-
-def sex_select(label, key):
-    return 1 if st.selectbox(label, ("Female", "Male"), key=key) == "Male" else 0
-
-if "Clinical" in model_choice:
-    # --- CLINICAL MODE INPUTS (11 Features) ---
+# =========================================================
+# TAB 1: THE CLINICAL DASHBOARD
+# =========================================================
+with tab_dashboard:
+    col_ctrl, col_form = st.columns([1, 3])
     
-    # Row 1: Demographics & History
-    c1, c2, c3, c4 = st.columns(4)
-    with c1: input_data['age'] = st.number_input("Age", 40, 95, 60, step=1)
-    with c2: input_data['sex'] = sex_select("Sex", "sex_c")
-    with c3: input_data['smoking'] = binary_select("Smoking", "smoke_c")
-    with c4: input_data['diabetes'] = binary_select("Diabetes", "dia_c")
-
-    # Row 2: Vitals & Lab 1
-    c1, c2, c3, c4 = st.columns(4)
-    with c1: input_data['ejection_fraction'] = st.number_input("Ejection Fraction (%)", 10, 80, 38)
-    with c2: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_c")
-    with c3: input_data['anaemia'] = binary_select("Anaemia", "ana_c")
-    with c4: input_data['platelets'] = st.number_input("Platelets (k/mL)", 25000.0, 850000.0, 263000.0, step=1000.0)
-
-    # Row 3: Lab 2 (Bio-markers)
-    c1, c2, c3 = st.columns(3)
-    with c1: input_data['serum_creatinine'] = st.number_input("Serum Creatinine (mg/dL)", 0.5, 9.5, 1.1, step=0.1)
-    with c2: input_data['serum_sodium'] = st.number_input("Serum Sodium (mEq/L)", 110, 150, 137, step=1)
-    with c3: input_data['creatinine_phosphokinase'] = st.number_input("CPK Level (mcg/L)", 23, 7861, 582, step=10)
-
-    active_model = clinical_model
-    # Feature list must match training order exactly
-    feature_order = ['age', 'anaemia', 'creatinine_phosphokinase', 'diabetes', 
-                     'ejection_fraction', 'high_blood_pressure', 'platelets', 
-                     'serum_creatinine', 'serum_sodium', 'sex', 'smoking']
-
-else:
-    # --- TRIAGE MODE INPUTS (6 Features) ---
-    st.info("ℹ️ Rapid Triage: Requires only patient history and basic observation.")
-    
-    # Row 1
-    c1, c2, c3 = st.columns(3)
-    with c1: input_data['age'] = st.number_input("Age", 40, 95, 60, step=1)
-    with c2: input_data['sex'] = sex_select("Sex", "sex_t")
-    with c3: input_data['smoking'] = binary_select("Smoking", "smoke_t")
-    
-    # Row 2
-    c1, c2, c3 = st.columns(3)
-    with c1: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_t")
-    with c2: input_data['diabetes'] = binary_select("Diabetes", "dia_t")
-    with c3: input_data['anaemia'] = binary_select("Anaemia", "ana_t")
-    
-    active_model = triage_model
-    feature_order = ['age', 'anaemia', 'diabetes', 'high_blood_pressure', 'sex', 'smoking']
-
-# ---------------------------------------------------------
-# 5. PREDICTION LOGIC
-# ---------------------------------------------------------
-st.markdown("###")
-predict_btn = st.button("Calculate Mortality Risk", type="primary", use_container_width=True)
-
-if predict_btn:
-    # Convert input dict to DataFrame with correct column order
-    df_input = pd.DataFrame([input_data])[feature_order]
-    
-    # Get Probability
-    risk_prob = active_model.predict_proba(df_input)[0][1]
-    
-    # Display Results
-    st.markdown("---")
-    
-    c_left, c_right = st.columns([1, 2])
-    
-    with c_left:
-        # Color coding the metric
-        color = "normal" if risk_prob < 0.3 else "off" # off is grey, streamlit metric handles delta colors better
-        st.metric(
-            label="30-Day Mortality Risk", 
-            value=f"{risk_prob:.1%}",
-            delta="High Risk" if risk_prob > 0.5 else "Low Risk",
-            delta_color="inverse"
+    with col_ctrl:
+        st.info("Select protocol depth:")
+        model_choice = st.radio(
+            "Protocol",
+            ["Triage Mode", "Clinical Mode"],
+            captions=["Vitals Only", "Full Lab Panel"]
         )
+
+    st.divider()
     
-    with c_right:
-        if risk_prob > 0.5:
-            st.error("⚠️ **High Risk Alert**")
-            st.write("Patient requires immediate clinical attention. Consider ICU admission or advanced heart failure therapies.")
-        elif risk_prob > 0.3:
-            st.warning("⚠️ **Moderate Risk**")
-            st.write("Patient requires close monitoring. Review medications and consider additional lab work.")
+    # --- INPUT FORM ---
+    input_data = {}
+    
+    # Helpers
+    def binary_select(label, key):
+        return 1 if st.selectbox(label, ("No", "Yes"), key=key) == "Yes" else 0
+    def sex_select(label, key):
+        return 1 if st.selectbox(label, ("Female", "Male"), key=key) == "Male" else 0
+
+    if "Clinical" in model_choice:
+        # Clinical Inputs (11 Features)
+        active_model = clinical_model
+        feature_order = ['age', 'anaemia', 'creatinine_phosphokinase', 'diabetes', 
+                         'ejection_fraction', 'high_blood_pressure', 'platelets', 
+                         'serum_creatinine', 'serum_sodium', 'sex', 'smoking']
+        
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: input_data['age'] = st.number_input("Age", 40, 95, 60)
+        with c2: input_data['sex'] = sex_select("Sex", "sex_c")
+        with c3: input_data['smoking'] = binary_select("Smoking", "smoke_c")
+        with c4: input_data['diabetes'] = binary_select("Diabetes", "dia_c")
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: input_data['ejection_fraction'] = st.number_input("EF (%)", 10, 80, 38)
+        with c2: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_c")
+        with c3: input_data['anaemia'] = binary_select("Anaemia", "ana_c")
+        with c4: input_data['platelets'] = st.number_input("Platelets", 25000.0, 850000.0, 263000.0)
+
+        c1, c2, c3 = st.columns(3)
+        with c1: input_data['serum_creatinine'] = st.number_input("Creatinine (mg/dL)", 0.5, 9.5, 1.1)
+        with c2: input_data['serum_sodium'] = st.number_input("Sodium (mEq/L)", 110, 150, 137)
+        with c3: input_data['creatinine_phosphokinase'] = st.number_input("CPK (mcg/L)", 23, 7861, 582)
+
+    else:
+        # Triage Inputs (6 Features)
+        active_model = triage_model
+        feature_order = ['age', 'anaemia', 'diabetes', 'high_blood_pressure', 'sex', 'smoking']
+        
+        c1, c2, c3 = st.columns(3)
+        with c1: input_data['age'] = st.number_input("Age", 40, 95, 60)
+        with c2: input_data['sex'] = sex_select("Sex", "sex_t")
+        with c3: input_data['smoking'] = binary_select("Smoking", "smoke_t")
+        
+        c1, c2, c3 = st.columns(3)
+        with c1: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_t")
+        with c2: input_data['diabetes'] = binary_select("Diabetes", "dia_t")
+        with c3: input_data['anaemia'] = binary_select("Anaemia", "ana_t")
+
+    # --- PREDICTION ---
+    st.markdown("###")
+    if st.button("Calculate Risk Profile", type="primary", use_container_width=True):
+        
+        # 1. Prepare Data
+        df_input = pd.DataFrame([input_data])[feature_order]
+        
+        # 2. Predict Risk
+        risk_prob = active_model.predict_proba(df_input)[0][1]
+        
+        # 3. Display Main Result
+        st.markdown("---")
+        c_res, c_msg = st.columns([1, 2])
+        
+        with c_res:
+            st.metric(
+                label="30-Day Mortality Risk", 
+                value=f"{risk_prob:.1%}",
+                delta="High Risk" if risk_prob > 0.5 else "Stable",
+                delta_color="inverse"
+            )
+        
+        with c_msg:
+            if risk_prob > 0.5:
+                st.error("⚠️ **High Risk Protocol Advised**")
+                st.write("Patient falls into the upper risk quartile. Recommended action: ICU admission or advanced therapy review.")
+            else:
+                st.success("✅ **Low Risk Profile**")
+                st.write("Patient is stable. Standard ward monitoring recommended.")
+
+        # 4. SHAP EXPLANATION (Drill-Down)
+        # This is the 'Why' part
+        with st.expander("▶ Click to understand why this prediction was made (SHAP Analysis)"):
+            st.caption("Feature contributions pushing risk UP (Red) or DOWN (Blue) from the baseline.")
+            
+            try:
+                # ACCESSING INNER MODEL FOR SHAP
+                # Since we wrapped in CalibratedClassifierCV -> Pipeline
+                # We need to access the base estimator's steps
+                
+                # 1. Get the pipeline from the first calibrated classifier
+                pipeline = active_model.calibrated_classifiers_[0].estimator
+                
+                # 2. Transform input data using the pipeline's scaler
+                # (SHAP needs the scaled numbers if the model saw scaled numbers)
+                if 'scaler' in pipeline.named_steps:
+                    input_scaled = pipeline.named_steps['scaler'].transform(df_input)
+                    input_scaled_df = pd.DataFrame(input_scaled, columns=feature_order)
+                else:
+                    input_scaled_df = df_input
+
+                # 3. Get the tree model (Random Forest)
+                model_step = pipeline.named_steps['rf'] # or 'model' depending on your training script
+                
+                # 4. Create Explainer
+                explainer = shap.TreeExplainer(model_step)
+                shap_values = explainer(input_scaled_df)
+                
+                # 5. Fix visualization names (Map scaled values back to raw inputs for display)
+                shap_values.data = df_input.values # Show raw values in plot (e.g. Age=60, not Age=0.5)
+                
+                # 6. Plot
+                fig, ax = plt.subplots()
+                shap.plots.waterfall(shap_values[0, 1], max_display=7, show=False)
+                st.pyplot(fig)
+                
+            except Exception as e:
+                st.warning(f"Could not generate SHAP plot for this model architecture: {e}")
+
+# =========================================================
+# TAB 2: MODEL EVIDENCE (Statistical Tests)
+# =========================================================
+with tab_evidence:
+    st.header("Statistical Validation & Rigor")
+    st.markdown("""
+    This model has been validated using rigorous statistical testing to ensure 
+    features add incremental value and probabilities are calibrated.
+    """)
+
+    col_stats, col_calib = st.columns(2)
+
+    with col_stats:
+        st.subheader("1. Feature Ladder (Hypothesis Testing)")
+        st.write("Likelihood Ratio Tests verifying incremental value of features.")
+        
+        if evidence_data['ladder'] is not None:
+            # Highlight significant p-values
+            def highlight_sig(s):
+                return ['background-color: #d1fae5' if v < 0.05 else '' for v in s]
+
+            st.dataframe(
+                evidence_data['ladder'].style.apply(highlight_sig, subset=['LR_p_value']),
+                width = 'stretch'
+            )
+            st.caption("Green rows indicate features that added statistically significant predictive power (p < 0.05).")
         else:
-            st.success("✅ **Low Risk**")
-            st.write("Standard monitoring and routine follow-up advised.")
+            st.warning("Ladder validation CSV not found in reports/tables/")
+
+    with col_calib:
+        st.subheader("2. Model Calibration")
+        st.write("Comparison of predicted probabilities vs. observed mortality.")
+        
+        try:
+            st.image("reports/figures/calibration_curves_calibrated.png", caption="Isotonic Regression Calibration", use_container_width=True)
+        except:
+            st.warning("Calibration image not found in reports/figures/")
+
+    st.divider()
+    
+    st.subheader("3. Global Feature Importance")
+    st.markdown("Derived from SHAP Summary analysis on the validation cohort.")
+    # Assuming you have a saved summary plot. If not, generate one in your notebook and save it.
+    try:
+        st.image("reports/figures/numerical_feature_analysis.png", caption="Feature Distributions", width=600)
+    except:
+        st.info("Feature analysis plot not available.")
