@@ -1,23 +1,14 @@
-# Dockerfile
-FROM jupyter/minimal-notebook:python-3.9
+FROM python:3.9-slim
 
-# Install system dependencies
-USER root
-RUN apt-get update && apt-get install -y \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
-# Switch back to jovyan to avoid permission issues
-USER ${NB_UID}
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python packages
-COPY requirements.txt /tmp/
-RUN pip install --no-cache-dir --timeout=600 -r /tmp/requirements.txt
+# You still COPY . . here so the image is self-contained for production deployment
+COPY . . 
 
-# Set working directory
-WORKDIR /home/jovyan/work
+EXPOSE 8501
 
-# Expose Jupyter port
-EXPOSE 8888
-
-# Start Jupyter Notebook
-CMD ["start-notebook.sh", "--NotebookApp.token=''", "--NotebookApp.password=''", "--NotebookApp.allow_origin='*'", "--NotebookApp.allow_remote_access=1"]
+# The address=0.0.0.0 is required for Docker networking
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]

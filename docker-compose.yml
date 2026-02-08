@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  glassheart:
+    build: .
+    container_name: glassheart_dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      # This maps your current folder (.) to the container folder (/app)
+      # Any change you make locally is immediately reflected inside.
+      - ./:/app
+    environment:
+      # FORCE Streamlit to reload on save
+      - STREAMLIT_SERVER_RUN_ON_SAVE=true
+      # CRITICAL for Docker: Use 'poll' instead of 'auto'
+      # Filesystem events (notify) often break across Docker volumes.
+      # Polling checks for changes every second and guarantees reloading works.
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
