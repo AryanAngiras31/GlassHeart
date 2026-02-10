@@ -60,9 +60,9 @@ tab_dashboard, tab_evidence = st.tabs(["Clinical Dashboard", "Model Evidence"])
 # TAB 1: THE CLINICAL DASHBOARD
 # =========================================================
 with tab_dashboard:
-    col_ctrl, col_form = st.columns([1, 3])
+    col_choice, col_input = st.columns([1, 3])
     
-    with col_ctrl:
+    with col_choice:
         model_choice = st.segmented_control(
             "Protocol",
             ["Triage Mode", "Clinical Mode"],
@@ -80,44 +80,45 @@ with tab_dashboard:
     def sex_select(label, key):
         return 1 if st.selectbox(label, ("Female", "Male"), key=key) == "Male" else 0
 
-    if "Clinical" in model_choice:
-        # Clinical Inputs (11 Features)
-        active_model = clinical_model
-        feature_order = ['age', 'anaemia', 'creatinine_phosphokinase', 'diabetes', 
-                         'ejection_fraction', 'high_blood_pressure', 'platelets', 
-                         'serum_creatinine', 'serum_sodium', 'sex', 'smoking']
-        
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: input_data['age'] = st.number_input("Age", 40, 95, 60)
-        with c2: input_data['sex'] = sex_select("Sex", "sex_c")
-        with c3: input_data['smoking'] = binary_select("Smoking", "smoke_c")
-        with c4: input_data['diabetes'] = binary_select("Diabetes", "dia_c")
+    with col_input:
+        if "Clinical" in model_choice:
+            # Clinical Inputs (11 Features)
+            active_model = clinical_model
+            feature_order = ['age', 'anaemia', 'creatinine_phosphokinase', 'diabetes', 
+                             'ejection_fraction', 'high_blood_pressure', 'platelets', 
+                             'serum_creatinine', 'serum_sodium', 'sex', 'smoking']
 
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: input_data['ejection_fraction'] = st.number_input("EF (%)", 10, 80, 38)
-        with c2: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_c")
-        with c3: input_data['anaemia'] = binary_select("Anaemia", "ana_c")
-        with c4: input_data['platelets'] = st.number_input("Platelets", 25000.0, 850000.0, 263000.0)
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: input_data['age'] = st.number_input("Age", 40, 95, 60)
+            with c2: input_data['sex'] = sex_select("Sex", "sex_c")
+            with c3: input_data['smoking'] = binary_select("Smoking", "smoke_c")
+            with c4: input_data['diabetes'] = binary_select("Diabetes", "dia_c")
 
-        c1, c2, c3 = st.columns(3)
-        with c1: input_data['serum_creatinine'] = st.number_input("Creatinine (mg/dL)", 0.5, 9.5, 1.1)
-        with c2: input_data['serum_sodium'] = st.number_input("Sodium (mEq/L)", 110, 150, 137)
-        with c3: input_data['creatinine_phosphokinase'] = st.number_input("CPK (mcg/L)", 23, 7861, 582)
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: input_data['ejection_fraction'] = st.number_input("EF (%)", 10, 80, 38)
+            with c2: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_c")
+            with c3: input_data['anaemia'] = binary_select("Anaemia", "ana_c")
+            with c4: input_data['platelets'] = st.number_input("Platelets", 25000.0, 850000.0, 263000.0)
 
-    else:
-        # Triage Inputs (6 Features)
-        active_model = triage_model
-        feature_order = ['age', 'anaemia', 'diabetes', 'high_blood_pressure', 'sex', 'smoking']
-        
-        c1, c2, c3 = st.columns(3)
-        with c1: input_data['age'] = st.number_input("Age", 40, 95, 60)
-        with c2: input_data['sex'] = sex_select("Sex", "sex_t")
-        with c3: input_data['smoking'] = binary_select("Smoking", "smoke_t")
-        
-        c1, c2, c3 = st.columns(3)
-        with c1: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_t")
-        with c2: input_data['diabetes'] = binary_select("Diabetes", "dia_t")
-        with c3: input_data['anaemia'] = binary_select("Anaemia", "ana_t")
+            c1, c2, c3 = st.columns(3)
+            with c1: input_data['serum_creatinine'] = st.number_input("Creatinine (mg/dL)", 0.5, 9.5, 1.1)
+            with c2: input_data['serum_sodium'] = st.number_input("Sodium (mEq/L)", 110, 150, 137)
+            with c3: input_data['creatinine_phosphokinase'] = st.number_input("CPK (mcg/L)", 23, 7861, 582)
+
+        else:
+            # Triage Inputs (6 Features)
+            active_model = triage_model
+            feature_order = ['age', 'anaemia', 'diabetes', 'high_blood_pressure', 'sex', 'smoking']
+
+            c1, c2, c3 = st.columns(3)
+            with c1: input_data['age'] = st.number_input("Age", 40, 95, 60)
+            with c2: input_data['sex'] = sex_select("Sex", "sex_t")
+            with c3: input_data['smoking'] = binary_select("Smoking", "smoke_t")
+
+            c1, c2, c3 = st.columns(3)
+            with c1: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_t")
+            with c2: input_data['diabetes'] = binary_select("Diabetes", "dia_t")
+            with c3: input_data['anaemia'] = binary_select("Anaemia", "ana_t")
 
     # --- PREDICTION ---
     st.markdown("###")
