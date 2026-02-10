@@ -6,6 +6,34 @@ import shap
 import matplotlib.pyplot as plt
 import numpy as np
 
+st.markdown(
+    """
+    <style>
+      /* Card container */
+      .gh-card {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        padding: 16px 16px 8px 16px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+
+      /* Section title */
+      .gh-title {
+        font-size: 0.95rem;
+        font-weight: 650;
+        letter-spacing: 0.2px;
+        margin: 0 0 10px 0;
+        color: rgba(255,255,255,0.9);
+      }
+
+      /* Muted text */
+      .gh-muted { color: rgba(255,255,255,0.65); font-size: 0.85rem; }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # ---------------------------------------------------------
 # 1. PAGE CONFIGURATION
 # ---------------------------------------------------------
@@ -48,8 +76,23 @@ if not clinical_model or not triage_model:
 # ---------------------------------------------------------
 # 3. HEADER
 # ---------------------------------------------------------
-st.title("❤️ GlassHeart CDSS")
-st.markdown("### Heart Failure Mortality Risk Assessment")
+col_title, col_choice = st.columns([3, 1])
+
+with col_title:
+    st.title("❤️ GlassHeart CDSS")
+    st.markdown("### Heart Failure Mortality Risk Assessment")
+
+with col_choice:
+    # Wraps the protocol selector in a card
+    st.markdown('<div class="gh-card">', unsafe_allow_html=True)
+    st.markdown('<div class="gh-title"></div>', unsafe_allow_html=True)
+
+    model_choice = st.segmented_control(
+        "Protocol",
+        ["Triage Mode", "Clinical Mode"],
+        default="Triage Mode"
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 4. TABS SYSTEM
@@ -60,14 +103,7 @@ tab_dashboard, tab_evidence = st.tabs(["Clinical Dashboard", "Model Evidence"])
 # TAB 1: THE CLINICAL DASHBOARD
 # =========================================================
 with tab_dashboard:
-    col_choice, col_input = st.columns([1, 3])
-    
-    with col_choice:
-        model_choice = st.segmented_control(
-            "Protocol",
-            ["Triage Mode", "Clinical Mode"],
-            default="Triage Mode"
-        )
+    col_input, col_output = st.columns([4, 2])
 
     st.divider()
     
@@ -81,6 +117,10 @@ with tab_dashboard:
         return 1 if st.selectbox(label, ("Female", "Male"), key=key) == "Male" else 0
 
     with col_input:
+        # Wraps the input form in a card
+        st.markdown('<div class="gh-card">', unsafe_allow_html=True)
+        st.markdown('<div class="gh-title">Patient Data</div>', unsafe_allow_html=True)
+        
         if "Clinical" in model_choice:
             # Clinical Inputs (11 Features)
             active_model = clinical_model
@@ -119,6 +159,8 @@ with tab_dashboard:
             with c1: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_t")
             with c2: input_data['diabetes'] = binary_select("Diabetes", "dia_t")
             with c3: input_data['anaemia'] = binary_select("Anaemia", "ana_t")
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # --- PREDICTION ---
     st.markdown("###")
