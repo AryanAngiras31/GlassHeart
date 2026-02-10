@@ -23,7 +23,7 @@ st.markdown(
         background: rgba(255,255,255,0.05);
         border: 1px solid rgba(255,255,255,0.1);
         border-radius: 12px;
-        padding: 20px;
+        padding: 24px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         margin-bottom: 20px;
       }
@@ -39,16 +39,22 @@ st.markdown(
       /* Muted text */
       .gh-muted { color: rgba(255,255,255,0.6); font-size: 0.9rem; }
       
-      /* Make Segmented Control Larger */
-      div[data-baseweb="segmented-control"] button {
+      /* --- SEGMENTED CONTROL STYLING (FIXED) --- */
+      /* Target the container and the text inside */
+      [data-testid="stSegmentedControl"] {
+        padding: 6px !important;
+      }
+      [data-testid="stSegmentedControl"] button {
         font-size: 1.1rem !important;
-        padding-top: 0.6rem !important;
-        padding-bottom: 0.6rem !important;
+        font-weight: 600 !important;
+        padding-top: 12px !important;
+        padding-bottom: 12px !important;
       }
       
       /* Custom Metric Style for Card */
-      .gh-metric-label { font-size: 0.9rem; color: rgba(255,255,255,0.7); }
-      .gh-metric-value { font-size: 2.2rem; font-weight: 800; color: #ffffff; }
+      .gh-metric-label { font-size: 1.0rem; color: rgba(255,255,255,0.7); margin-top: -8px; margin-bottom: 8px; }
+      .gh-metric-value { font-size: 2.2rem; font-weight: 800; color: #ffffff; line-height: 1.1; }
+      .gh-metric-tag   { font-size: 1.4rem; font-weight: 700; margin-left: 80px; align-self: flex-end; }
     </style>
     """,
     unsafe_allow_html=True
@@ -85,9 +91,23 @@ if not clinical_model or not triage_model:
     st.stop()
 
 # ---------------------------------------------------------
-# 3. HEADER
+# 3. HELPER: RESET STATE
 # ---------------------------------------------------------
-col_title, col_choice = st.columns([3, 1], vertical_alignment="bottom")
+def reset_results():
+    """Clears the SHAP result and prediction when inputs change"""
+    st.session_state['run_shap'] = False
+    st.session_state['prediction_made'] = False
+
+# Initialize state if not present
+if 'run_shap' not in st.session_state:
+    st.session_state['run_shap'] = False
+if 'prediction_made' not in st.session_state:
+    st.session_state['prediction_made'] = False
+
+# ---------------------------------------------------------
+# 4. HEADER
+# ---------------------------------------------------------
+col_title, col_choice = st.columns([5, 2], vertical_alignment="bottom")
 
 with col_title:
     st.title("❤️ GlassHeart CDSS")
@@ -97,11 +117,12 @@ with col_choice:
     model_choice = st.segmented_control(
         "Assessment Protocol",
         ["Triage Mode", "Clinical Mode"],
-        default="Triage Mode"
+        default="Triage Mode",
+        on_change=reset_results # RESET ON MODE CHANGE
     )
 
 # ---------------------------------------------------------
-# 4. TABS SYSTEM
+# 5. TABS SYSTEM
 # ---------------------------------------------------------
 tab_dashboard, tab_evidence = st.tabs(["Clinical Dashboard", "Model Evidence"])
 
@@ -109,18 +130,21 @@ tab_dashboard, tab_evidence = st.tabs(["Clinical Dashboard", "Model Evidence"])
 # TAB 1: THE CLINICAL DASHBOARD
 # =========================================================
 with tab_dashboard:
-    
     # Create Main Layout: Inputs (Left) vs Results (Right)
-    col_inputs, col_results = st.columns([5, 2], gap="large")
+    col_inputs, col_results = st.columns([6, 2], gap="large")
 
     # --- INPUT FORM (Left Column) ---
     input_data = {}
     
-    # Helpers
+    # Helpers with on_change callback attached
     def binary_select(label, key):
-        return 1 if st.selectbox(label, ("No", "Yes"), key=key) == "Yes" else 0
+        return 1 if st.selectbox(label, ("No", "Yes"), key=key, on_change=reset_results) == "Yes" else 0
+    
     def sex_select(label, key):
-        return 1 if st.selectbox(label, ("Female", "Male"), key=key) == "Male" else 0
+        return 1 if st.selectbox(label, ("Female", "Male"), key=key, on_change=reset_results) == "Male" else 0
+
+    def num_input(label, min_v, max_v, default_v, key, step=None):
+        return st.number_input(label, min_v, max_v, default_v, step=step, key=key, on_change=reset_results)
 
     with col_inputs:
         st.subheader("Patient Vitals")
@@ -133,7 +157,7 @@ with tab_dashboard:
 
             # Row 1 (3 items)
             c1, c2, c3 = st.columns(3)
-            with c1: input_data['age'] = st.number_input("Age", 40, 95, 60)
+            with c1: input_data['age'] = num_input("Age", 40, 95, 60, "age_c")
             with c2: input_data['sex'] = sex_select("Sex", "sex_c")
             with c3: input_data['smoking'] = binary_select("Smoking", "smoke_c")
 
@@ -145,30 +169,30 @@ with tab_dashboard:
 
             # Row 3 (3 items)
             c1, c2, c3 = st.columns(3)
-            with c1: input_data['serum_sodium'] = st.number_input("Sodium (mEq/L)", 110, 150, 137)
-            with c2: input_data['platelets'] = st.number_input("Platelets", 25000.0, 850000.0, 263000.0)
-            with c3: input_data['serum_creatinine'] = st.number_input("Creatinine (mg/dL)", 0.5, 9.5, 1.1)
+            with c1: input_data['ejection_fraction'] = num_input("EF (%)", 10, 80, 38, "ef_c")
+            with c2: input_data['platelets'] = num_input("Platelets", 25000.0, 850000.0, 263000.0, "pl_c", step=1000.0)
+            with c3: input_data['serum_creatinine'] = num_input("Creatinine (mg/dL)", 0.5, 9.5, 1.1, "cr_c", step=0.1)
 
-            # Row 4 (2 items)
-            c1, c2, c3 = st.columns(3)
-            with c1: input_data['ejection_fraction'] = st.number_input("EF (%)", 10, 80, 38)
-            with c2: input_data['creatinine_phosphokinase'] = st.number_input("CPK (mcg/L)", 23, 7861, 582)
+            # Row 4 (2 items - Full Width)
+            c1, c2 = st.columns(2)
+            with c1: input_data['serum_sodium'] = num_input("Sodium (mEq/L)", 110, 150, 137, "na_c")
+            with c2: input_data['creatinine_phosphokinase'] = num_input("CPK (mcg/L)", 23, 7861, 582, "cpk_c", step=10)
 
         else:
             active_model = triage_model
             feature_order = ['age', 'anaemia', 'diabetes', 'high_blood_pressure', 'sex', 'smoking']
 
-            # Row 1 (2 items)
+            # Row 1 (3 items)
             c1, c2 = st.columns(2)
-            with c1: input_data['age'] = st.number_input("Age", 40, 95, 60)
+            with c1: input_data['age'] = num_input("Age", 40, 95, 60, "age_t")
             with c2: input_data['sex'] = sex_select("Sex", "sex_t")
 
-            # Row 2 (2 items)
+            # Row 2 (3 items)
             c1, c2 = st.columns(2)
             with c1: input_data['smoking'] = binary_select("Smoking", "smoke_t")
             with c2: input_data['high_blood_pressure'] = binary_select("Hypertension", "hbp_t")
 
-            # Row 3 (2 items)
+            # Row 3 (3 items)
             c1, c2 = st.columns(2)
             with c1: input_data['diabetes'] = binary_select("Diabetes", "dia_t")
             with c2: input_data['anaemia'] = binary_select("Anaemia", "ana_t")
@@ -176,12 +200,15 @@ with tab_dashboard:
 
     # --- PREDICTION & RESULTS (Right Column) ---
     with col_results:
-        # Spacer to push button down slightly to align with inputs
         st.markdown("###") 
         
         calc_trigger = st.button("Calculate Risk Profile", type="primary", use_container_width=True)
         
         if calc_trigger:
+            st.session_state['prediction_made'] = True
+            
+        # Only show results if Calculate was clicked AND state hasn't been reset
+        if st.session_state['prediction_made']:
             # 1. Prepare Data
             df_input = pd.DataFrame([input_data])[feature_order]
             
@@ -189,14 +216,17 @@ with tab_dashboard:
             risk_prob = active_model.predict_proba(df_input)[0][1]
             
             # 3. Display Result in Custom Card
+            # FIX: Label is now to the RIGHT of value using flexbox
             risk_color = "#ff4b4b" if risk_prob > 0.5 else "#09ab3b"
             risk_label = "HIGH RISK" if risk_prob > 0.5 else "LOW RISK"
             
             st.markdown(f"""
             <div class="gh-card">
                 <div class="gh-metric-label">Mortality Probability</div>
-                <div class="gh-metric-value" style="color: {risk_color}">{risk_prob:.1%}</div>
-                <div style="margin-top: 10px; font-weight: bold; color: {risk_color}">{risk_label}</div>
+                <div style="display: flex; flex-direction: row; align-items: baseline;">
+                    <div class="gh-metric-value" style="color: {risk_color}">{risk_prob:.1%}</div>
+                    <div class="gh-metric-tag" style="color: {risk_color}">{risk_label}</div>
+                </div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -205,52 +235,59 @@ with tab_dashboard:
             else:
                 st.success("**Protocol Advised:** Standard ward monitoring.")
             
-            # Store data for SHAP below
+            # Store data for SHAP
             st.session_state['run_shap'] = True
             st.session_state['df_input'] = df_input
             st.session_state['feature_order'] = feature_order
             st.session_state['active_model'] = active_model
 
     # --- SHAP EXPLANATION (Full Width Below) ---
+    # Only shows if run_shap is TRUE (which is cleared on any input change)
     if st.session_state.get('run_shap', False):
         st.markdown("---")
-        st.subheader("Model Explanation (SHAP)")
         
-        with st.spinner("Generating feature impact analysis..."):
-            try:
-                # Retrieve from session state
-                df_in = st.session_state['df_input']
-                feats = st.session_state['feature_order']
-                model = st.session_state['active_model']
+        # Use Expander for SHAP 
+        with st.expander("▶ Click to understand why this prediction was made (SHAP Analysis)", expanded=False):
+            with st.spinner("Generating feature impact analysis..."):
+                try:
+                    df_in = st.session_state['df_input']
+                    feats = st.session_state['feature_order']
+                    model = st.session_state['active_model']
 
-                # Pipeline access
-                # Adjust based on your scikit-learn version (estimator vs base_estimator)
-                calibrated_clf = model.calibrated_classifiers_[0]
-                pipeline = calibrated_clf.estimator if hasattr(calibrated_clf, "estimator") else calibrated_clf.base_estimator
-                
-                if 'scaler' in pipeline.named_steps:
-                    input_scaled = pipeline.named_steps['scaler'].transform(df_in)
-                    input_scaled_df = pd.DataFrame(input_scaled, columns=feats)
-                else:
-                    input_scaled_df = df_in
+                    # Pipeline access
+                    calibrated_clf = model.calibrated_classifiers_[0]
+                    pipeline = calibrated_clf.estimator if hasattr(calibrated_clf, "estimator") else calibrated_clf.base_estimator
+                    
+                    if 'scaler' in pipeline.named_steps:
+                        input_scaled = pipeline.named_steps['scaler'].transform(df_in)
+                        input_scaled_df = pd.DataFrame(input_scaled, columns=feats)
+                    else:
+                        input_scaled_df = df_in
 
-                model_step = pipeline.named_steps['rf']
-                
-                explainer = shap.TreeExplainer(model_step)
-                shap_values = explainer(input_scaled_df, check_additivity=False)
-                
-                # Fix visualization data
-                sv = shap_values[0, :, 1]
-                sv.data = df_in.iloc[0].values
-                
-                # Plot
-                plt.style.use("dark_background")
-                fig, ax = plt.subplots(figsize=(10, 5))
-                shap.plots.waterfall(sv, max_display=10, show=False)
-                st.pyplot(fig)
-                
-            except Exception as e:
-                st.warning(f"Could not generate SHAP plot: {e}")
+                    model_step = pipeline.named_steps['rf']
+                    
+                    explainer = shap.TreeExplainer(model_step)
+                    shap_values = explainer(input_scaled_df, check_additivity=False)
+                    
+                    sv = shap_values[0, :, 1]
+                    sv.data = df_in.iloc[0].values
+                    
+                    plt.style.use("dark_background")
+                    fig, ax = plt.subplots(figsize=(2, 5))
+                    shap.decision_plot(
+                    base_value=sv.base_values,
+                    shap_values=sv.values,
+                    features=sv.data,
+                    feature_names=feature_order,
+                    show=False
+                    )
+                    ax = plt.gca()
+                    ax.tick_params(axis="y", colors="white")
+                    ax.tick_params(axis="x", colors="white")
+                    st.pyplot(fig, use_container_width=True)
+                    
+                except Exception as e:
+                    st.warning(f"Could not generate SHAP plot: {e}")
 
 # =========================================================
 # TAB 2: MODEL EVIDENCE
@@ -277,7 +314,7 @@ with tab_evidence:
         st.image("reports/figures/calibration_curves_calibrated.png", use_container_width=True)
     except:
         st.write("Image not found")
-            
+    
     st.divider()
 
     st.subheader("Global Importance")
