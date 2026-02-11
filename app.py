@@ -389,7 +389,7 @@ with tab_evidence:
         col_cal_img, col_cal_metric = st.columns([2, 1])
         with col_cal_img:
             try:
-                st.image("reports/figures/calibration_curves_calibrated.png", caption="Reliability Diagram (Isotonic Regression)", use_container_width=True)
+                st.image("reports/figures/calibration_curves_calibrated.png", caption="Reliability Diagram (Sigmoid Calibration)", use_container_width=True)
             except:
                 st.warning("Calibration plot not found.")
         
@@ -415,13 +415,13 @@ with tab_evidence:
         # --- SECTION 4: OPTIMAL THRESHOLD SELECTION ---
         st.markdown("### 4. Decision Threshold Optimization")
         st.markdown('''
-        - **The Trade-off:** Standard machine learning models use a default decision threshold of **0.5** (probability > 50% = Death). In a clinical setting with imbalanced data (such as in this dataset), this often results in the model having low Sensitivity (missing high-risk patients).
+        - **The Trade-off:** Standard machine learning models use a default decision threshold of **0.5** (probability > 50% = Death). In a clinical setting with imbalanced data (such as in this dataset), this often results in missing high-risk patients.
         - **Methodology:** We analyzed the ROC Curve to calculate the **Youden’s J Statistic** (*Sensitivity + Specificity - 1*) for every possible threshold. 
-        - **The Result:** The optimal threshold maximizes the vertical distance between the ROC curve and the diagonal chance line, providing the best mathematical balance between catching sick patients (Sensitivity) and avoiding false alarms (Specificity).
+        - **The Result:** The optimal threshold maximizes the perpendicular distance between the ROC curve and the diagonal chance line, providing the best balance between catching sick patients (Sensitivity) and avoiding false alarms (Specificity). It was found to be **0.243**
+        - **Plot:** Below is the plot for the ROC Curve with the optimal threshold for this Random Forest model. 
         ''')
 
-        if 'X_test' in evidence_data and 'y_test' in evidence_data:
-             st.info("💡 **Interactive Check:** Use the slider in the dashboard section above to manually test the impact of changing this threshold on the Confusion Matrix.")
+        st.image("reports/figures/optimal_threshold_RF.png", caption="ROC Curve with Optimal Threshold", use_container_width=False)
 
         st.divider()
 
