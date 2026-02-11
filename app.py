@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import joblib
-
+import altair as alt
 import shap
 import matplotlib.pyplot as plt
 import numpy as np
@@ -70,7 +70,7 @@ def load_models():
         triage = joblib.load('models/triage_model_calibrated.joblib')
         return clinical, triage
     except FileNotFoundError:
-        st.error("⚠️ Models not found! Please run 'python train_models.py' locally first.")
+        st.error("Models not found! Please run 'python train_models.py' locally first.")
         return None, None
 
 @st.cache_data
@@ -80,7 +80,10 @@ def load_evidence():
     try:
         evidence['ladder'] = pd.read_csv('reports/tables/final_evaluation_rf.csv')
         evidence['calibration'] = pd.read_csv('reports/tables/calibration_results.csv')
-    except FileNotFoundError:
+        evidence['X_test'] = joblib.load('artifacts/splits/x_test.joblib')
+        evidence['y_test'] = joblib.load('artifacts/splits/y_test.joblib')
+    except Exception as e:
+        st.error(f"Error loading evidence: {e}")
         evidence['ladder'] = None
     return evidence
 
@@ -293,32 +296,154 @@ with tab_dashboard:
 # TAB 2: MODEL EVIDENCE
 # =========================================================
 with tab_evidence:
-    st.header("Statistical Validation & Rigor")
-    st.markdown("Likelihood Ratio Tests verifying incremental value of features.")
-    
-    if evidence_data['ladder'] is not None:
-        def highlight_sig(s):
-            return ['background-color: #12b207' if float(v) < 0.05 else '' for v in s]
-        
-        st.dataframe(
-            evidence_data['ladder'].style.apply(highlight_sig, subset=['LR_p_value']),
-            use_container_width=True
-        )
+    if evidence_data['ladder'] is None:
+        st.error("Evidence data not found. Please run notebooks/Model_Building_and_Evaluation.ipynb to generate artifacts.")
     else:
-        st.warning("Validation data not found.")
+        # --- SECTION 1: THE VERDICT ---
+        st.markdown("### 1. The Verdict: Hypothesis Testing")
+        st.markdown(
+            """
+            <div class="verdict-box">
+                <div class="verdict-title">Statistical Conclusions</div>
+                • <b>Primary Hypothesis (Supported):</b> Lower ejection fraction and higher serum creatinine are dominant predictors. Adding EF to the baseline model yielded a statistically significant improvement (p < 0.01).<br>
+                • <b>Secondary Hypothesis (Not Supported):</b> Serum sodium and age nonlinearity did not provide independent incremental value. Likelihood Ratio Tests suggest the improvement was not statistically significant (p > 0.05).
+            </div>
+            """, unsafe_allow_html=True
+        )
 
-    st.divider()
-    
-    st.subheader("Calibration")
-    try:
-        st.image("reports/figures/calibration_curves_calibrated.png", use_container_width=True)
-    except:
-        st.write("Image not found")
-    
-    st.divider()
+        # --- SECTION 2: AUC STEP-UP CHART (MATPLOTLIB) ---
+        st.markdown("### 2. Feature Ladder (Incremental Value)")
+        st.markdown("We re-trained the model on progressively larger feature sets. This chart visualizes the **AUC Gain** at each step, coloring bars by statistical significance (Green = Significant, Grey = Not Significant).")
+        
+        ladder_df = evidence_data['ladder'].copy()
+        
+        # Prepare Data for Plotting
+        # We want to plot the 'extended_fs' vs 'DeLong_extended_AUC'
+        # Color based on 'LR_p_value' < 0.05
+        
+        fig, ax = plt.subplots(figsize=(10, 4))
+        
+        # Color logic
+        colors = ['#10b981' if p < 0.05 else '#6b7280' for p in ladder_df['LR_p_value']]
+        
+        # Plot
+        bars = ax.bar(ladder_df['extended_fs'], ladder_df['DeLong_extended_AUC'], color=colors, edgecolor='white', linewidth=0.5)
+        
+        # Styling
+        plt.style.use("dark_background")
+        ax.set_ylim(0.5, 0.95)
+        ax.set_ylabel("ROC AUC Score", color="#e5e7eb", fontsize=10)
+        ax.set_xlabel("Feature Set Added", color="#e5e7eb", fontsize=10)
+        ax.set_title("Model Performance Step-Up", color="white", fontsize=12, pad=15)
+        
+        # Axis colors
+        ax.tick_params(axis='x', colors='#d1d5db', rotation=0)
+        ax.tick_params(axis='y', colors='#d1d5db')
+        
+        # Remove spines for cleaner look
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color('#4b5563')
+        ax.spines['bottom'].set_color('#4b5563')
+        
+        # Grid
+        ax.grid(axis='y', linestyle='--', alpha=0.3)
+        ax.set_facecolor('none')
+        fig.patch.set_facecolor('none')
 
-    st.subheader("Global Importance")
-    try:
-        st.image("reports/figures/numerical_feature_analysis.png", use_container_width=True)
-    except:
-        st.write("Image not found")
+        # Annotations
+        for bar in bars:
+            height = bar.get_height()
+            ax.annotate(f'{height:.3f}',
+                        xy=(bar.get_x() + bar.get_width() / 2, height),
+                        xytext=(0, 3), 
+                        textcoords="offset points",
+                        ha='center', va='bottom', color='white', fontsize=9, fontweight='bold')
+
+        st.pyplot(fig, use_container_width=True)
+
+        st.divider()
+
+        # --- SECTION 3: INTERACTIVE THRESHOLD ---
+        st.markdown("### 3. Optimal Threshold Selection")
+        st.markdown("*\"Now that we have well-calibrated models, we must select the optimal classification threshold. We will use the **Youden's J statistic** from the test set ROC curve to find the threshold that provides the best balance between sensitivity and specificity.\"*")
+        
+        if 'X_test' in evidence_data and 'y_test' in evidence_data:
+            X_test = evidence_data['X_test']
+            y_test = evidence_data['y_test']
+            
+            cols_needed = ['age', 'anaemia', 'creatinine_phosphokinase', 'diabetes', 
+                             'ejection_fraction', 'high_blood_pressure', 'platelets', 
+                             'serum_creatinine', 'serum_sodium', 'sex', 'smoking']
+            try:
+                probs = clinical_model.predict_proba(X_test[cols_needed])[:, 1]
+                
+                col_slider, col_metrics = st.columns([1, 2])
+                
+                with col_slider:
+                    st.write("**Adjust Decision Threshold:**")
+                    threshold = st.slider("Threshold", 0.0, 1.0, 0.24, key="thresh_slider",
+                                        help="Lower thresholds catch more cases (higher sensitivity) but increase false alarms.")
+                    y_pred = (probs >= threshold).astype(int)
+                    
+                    # Confusion Matrix
+                    cm = confusion_matrix(y_test, y_pred)
+                    tn, fp, fn, tp = cm.ravel()
+                    
+                    st.write("<b>Confusion Matrix (Test Set)</b>", unsafe_allow_html=True)
+                    st.write(pd.DataFrame(cm, 
+                                        columns=['Pred: Survived', 'Pred: Died'], 
+                                        index=['Actual: Survived', 'Actual: Died']))
+
+                with col_metrics:
+                    acc = accuracy_score(y_test, y_pred)
+                    sens = recall_score(y_test, y_pred)
+                    spec = tn / (tn + fp) if (tn + fp) > 0 else 0
+                    youden = sens + spec - 1
+                    
+                    st.markdown("#### Performance Metrics")
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Sensitivity", f"{sens:.1%}", help="True Positive Rate (Recall)")
+                    m2.metric("Specificity", f"{spec:.1%}", help="True Negative Rate")
+                    m3.metric("Accuracy", f"{acc:.1%}")
+                    m4.metric("Youden's J", f"{youden:.2f}")
+                    
+                    if sens > 0.9:
+                        st.caption("✅ High Sensitivity: Good for screening (few missed cases).")
+                    elif spec > 0.9:
+                        st.caption("✅ High Specificity: Good for confirming diagnosis (few false alarms).")
+                        
+            except Exception as e:
+                st.warning(f"Could not compute interactive metrics: {e}")
+        else:
+            st.info("Test data not loaded.")
+
+        st.divider()
+
+        # --- SECTION 4: CALIBRATION ---
+        col_calib, col_shap = st.columns(2)
+        
+        with col_calib:
+            st.markdown("### 4. Calibration Analysis")
+            st.markdown("*\"Predictive accuracy (discrimination) is not enough for a clinical risk model; we also need models that produce reliable probabilities (calibration). A well-calibrated model's predicted probability of 30% should correspond to an event actually occurring ~30% of the time.\"*")
+            st.markdown("We used **Isotonic Regression** to align predicted probabilities. A lower Brier Score indicates better calibration.")
+            
+            try:
+                st.image("reports/figures/calibration_curves_calibrated.png", use_container_width=True)
+                if evidence_data['calibration'] is not None:
+                    cal_df = evidence_data['calibration']
+                    rf_cal = cal_df[cal_df['model'] == 'RandomForestClassifier'].iloc[0]
+                    st.metric("Brier Score Improvement (RF)", 
+                              f"{rf_cal['brier_orig']:.3f} → {rf_cal['brier_cal']:.3f}",
+                              delta=f"{rf_cal['brier_orig'] - rf_cal['brier_cal']:.3f} (Lower is better)",
+                              delta_color="inverse")
+            except:
+                st.write("Image not found")
+                
+        with col_shap:
+            st.markdown("### 5. Global Feature Importance")
+            st.markdown("Derived from SHAP Summary analysis on the validation cohort. This confirms that **Serum Creatinine** and **Ejection Fraction** are the most impactful features globally, aligning with clinical literature.")
+            try:
+                st.image("reports/figures/numerical_feature_analysis.png", use_container_width=True)
+            except:
+                st.write("Image not found")
