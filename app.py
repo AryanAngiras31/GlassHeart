@@ -428,32 +428,33 @@ with tab_evidence:
         # --- SECTION 5: FINAL RESULTS (HYPOTHESIS VALIDATION) ---
         st.markdown("### 5. Final Results & Statistical Significance")
         st.markdown('''
-        - To rigorously validate the hypothesis, we employed two statistical tests on the incremental models:
-            1. **Likelihood Ratio Test (LRT):** Compares the goodness-of-fit between nested models. It tells us if adding a feature significantly reduces the model's error.
-            2. **DeLong’s Test:** A specialized non-parametric test to compare the AUC of two correlated ROC curves.
-        
-        - **The Findings (from `final_evaluation_rf.csv`):**
+        - To just compare the ROC AUC of the different feature sets in a sequential fashion like we did in the Feature Ladder section is not enough to validate the hypothesis.
+        - The feature ladder approach was modified to compare a simpler model to a complex model with one extra feature added. For example, the models using the "ef" and "cr" feature sets were compared to the baseline and the model using the "ef+cr" feature set was compared to the models using the "ef" and "cr" feature sets.
+        - To make sure that the added feature significantly increased the predictive power of the model, we used two statistical tests. These tests output a p-value, for which we used a confidence level of 0.05. The tests are described as follows:\n
+            - **Likelihood Ratio (LR) Test:** This test compares two nested models. It assumes a null hypothesis that the simpler model is as good as the more complex one. A **p-value < 0.05** indicates the added features provide a statistically significant improvement in model fit.
+            - **DeLong's Test:** This test compares the Area Under the Curve (AUC) of two ROC curves from the same data. The null hypothesis is that there is no difference in discriminative power. A **p-value < 0.05** indicates a statistically significant difference between the two models' AUCs.\n
         ''')
 
         if evidence_data['final_evaluation'] is not None:
             # Extract specific rows for narrative
             df_res = evidence_data['final_evaluation']
-            
-            # 1. Check EF Significance
-            ef_row = df_res[df_res['extended_fs'] == 'ef+cr'] # Assuming this is the step where EF/CR interaction is tested or similar
-            # Note: Adjust logic to match your specific CSV structure. 
-            # Below is a generic display of the final decision table.
-            
+            df_res = df_res.iloc[:, 2:]
+
+
+             # Highlight significant p-values
+            def highlight_sig(s):
+                return ['background-color: #0ba813' if v < 0.05 else '' for v in s]
+
             st.dataframe(
-                df_res[['extended_fs', 'LR_p_value', 'DeLong_p_value', 'DeLong_extended_AUC']].style.format({
-                    'LR_p_value': '{:.4f}',
-                    'DeLong_p_value': '{:.4f}',
-                    'DeLong_extended_AUC': '{:.3f}'
-                }),
-                use_container_width=True
+                df_res.style.apply(highlight_sig, subset=['LR_p_value', 'DeLong_p_value']),
+                width = 'stretch'
             )
+            st.caption("Green rows indicate features that added statistically significant predictive power (p < 0.05).")
             
             st.markdown('''
-            - **Primary Hypothesis (Supported):** The addition of *Ejection Fraction* and *Serum Creatinine* resulted in p-values **< 0.05** in the Likelihood Ratio tests, confirming they provide statistically significant information gain.
-            - **Secondary Hypothesis (Rejected):** The addition of *Serum Sodium* and *Age Squared* (Non-linear age) yielded p-values **> 0.05**. While they may increase the AUC marginally in the training set, they do not provide statistically significant incremental value over the simpler model in this cohort.
+            The results provide evidence that the primary hypothesis is valid and that the secondary hypothesis is invalid.
+
+            - **Dominant Predictors (ef and cr)**: The model with the highest performance (RandomForestClassifier) utilizes ef and implicitly cr (as it's used in the ef+cr+na set), confirming these as effective features. Furthermore, the simplest model tested (LogisticRegression on ef) achieved a respectable ROC AUC of 0.648. This supports the premise that ejection_fraction is a dominant, foundational predictor of mortality.
+
+            - **Independent Incremental Value (na and age2)**: The final results provide no evidence to support the hypothesis that serum sodium (na) or age nonlinearity (age2) offer significant independent incremental value.
             ''')
