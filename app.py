@@ -415,7 +415,7 @@ with tab_evidence:
         # --- SECTION 4: OPTIMAL THRESHOLD SELECTION ---
         st.markdown("### 4. Decision Threshold Optimization")
         st.markdown('''
-        - **The Trade-off:** Standard machine learning models use a default decision threshold of **0.5** (probability > 50% = Death). In a clinical setting with imbalanced data (fewer deaths than survivors), this often results in low Sensitivity (missing high-risk patients).
+        - **The Trade-off:** Standard machine learning models use a default decision threshold of **0.5** (probability > 50% = Death). In a clinical setting with imbalanced data (such as in this dataset), this often results in the model having low Sensitivity (missing high-risk patients).
         - **Methodology:** We analyzed the ROC Curve to calculate the **Youden’s J Statistic** (*Sensitivity + Specificity - 1*) for every possible threshold. 
         - **The Result:** The optimal threshold maximizes the vertical distance between the ROC curve and the diagonal chance line, providing the best mathematical balance between catching sick patients (Sensitivity) and avoiding false alarms (Specificity).
         ''')
