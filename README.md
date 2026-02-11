@@ -1,6 +1,6 @@
-# Heart Failure Prediction Model
+# GlassHeart
 
-This project predicts the likelihood of heart failure in patients based on clinical records using supervised learning. The project includes comprehensive data preprocessing, feature engineering, model development, calibration, and evaluation. It validates the hypotheses "**Lower ejection fraction and higher serum creatinine are dominant predictors of mortality; serum sodium and age nonlinearity provide independent incremental value**".
+This project implements **GlassHeart**, a Clinical Decision Support System (CDSS) that predicts the likelihood of heart failure mortality based on clinical records. Beyond standard modeling, it features an interactive dashboard that allows clinicians to assess patient risk in real-time, visualize feature importance using SHAP, and validate the model's rigorous statistical foundations. This is deployed at [GlassHeart](https://glassheart.streamlit.app/).
 
 ## Table of Contents
 
@@ -55,18 +55,22 @@ The project uses the UCI Heart Failure dataset containing patient records with t
 ## Project Structure
 
 ```
-Heart-Failure-Prediction-Model/
+GlassHeart/
 ├── data/                                   # Data file
 │   └── heart_failure_clinical_records.csv
 ├── notebooks/                              # Jupyter notebooks
 │   ├── EDA_and_Preprocessing.ipynb         # Exploratory Data Analysis
 │   ├── Model_Building_and_Evaluation.ipynb # Model development
-│   ├── utils.py                            # Utility functions
-│   ├── artifacts/                          # Saved models and objects
-│   └── reports/                            # Generated reports
-│       ├── figures/                        # Saved plots
-│       └── tables/                         # Saved tables
-├── Dockerfile                              # Docker configuration
+│   └── utils.py                            # Utility functions
+├── artifacts/                              # Saved pipelines and test splits
+├── models/                                 # Calibrated model binaries (.joblib)
+├── reports/                                # Generated analysis
+│   ├── figures/                            # Saved plots (SHAP, Calibration curves)
+│   └── tables/                             # Statistical test results
+├── app.py                                  # Streamlit Dashboard application
+├── train_models.py                         # Script to retrain and calibrate models
+├── docker-compose.yml                      # Dashboard orchestration
+├── Dockerfile                              # Docker configuration for notebooks
 ├── requirements.txt                        # Project dependencies
 └── README.md                               # Project documentation
 ```

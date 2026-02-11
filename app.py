@@ -134,6 +134,11 @@ tab_dashboard, tab_evidence = st.tabs(["Clinical Dashboard", "Model Evidence"])
 # TAB 1: THE CLINICAL DASHBOARD
 # =========================================================
 with tab_dashboard:
+    st.markdown("""
+    - Select the **Assessment Protocol** above (Triage vs. Clinical).
+    - Enter the patient's latest vitals in the form below.
+    - Click **Calculate Risk Profile** to generate the mortality risk assessment from heart failure.
+    """)
     # Create Main Layout: Inputs (Left) vs Results (Right)
     col_inputs, col_results = st.columns([6, 2], gap="large")
 
@@ -290,6 +295,17 @@ with tab_dashboard:
                     
                 except Exception as e:
                     st.warning(f"Could not generate SHAP plot: {e}")
+
+        # --- NEW: Medical Disclaimer ---
+        st.warning("""
+        **⚠️ DISCLAIMER: RESEARCH PROTOTYPE ONLY**
+        
+        - This application is a Clinical Decision Support System (CDSS) prototype designed for **educational and research purposes**. 
+        The risk estimates provided are based on historical data patterns and **must not** be interpreted as a definitive medical prognosis.
+        
+        - This tool should **not** be used as a substitute for professional medical judgment, diagnosis, or treatment. 
+        Always adhere to standard clinical guidelines and institutional protocols.
+        """)
 
 # =========================================================
 # TAB 2: MODEL EVIDENCE
@@ -452,7 +468,8 @@ with tab_evidence:
             st.caption("Green rows indicate features that added statistically significant predictive power (p < 0.05).")
             
             st.markdown('''
-            The results provide evidence that the primary hypothesis is valid and that the secondary hypothesis is invalid.
+            The results provide evidence that the primary hypothesis is valid and
+             that the secondary hypothesis is invalid.
 
             - **Dominant Predictors (ef and cr)**: The model with the highest performance (RandomForestClassifier) utilizes ef and implicitly cr (as it's used in the ef+cr+na set), confirming these as effective features. Furthermore, the simplest model tested (LogisticRegression on ef) achieved a respectable ROC AUC of 0.648. This supports the premise that ejection_fraction is a dominant, foundational predictor of mortality.
 
