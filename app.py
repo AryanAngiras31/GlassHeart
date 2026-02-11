@@ -248,8 +248,6 @@ with tab_dashboard:
     # --- SHAP EXPLANATION (Full Width Below) ---
     # Only shows if run_shap is TRUE (which is cleared on any input change)
     if st.session_state.get('run_shap', False):
-        st.markdown("---")
-        
         # Use Expander for SHAP 
         with st.expander("▶ Click to understand why this prediction was made (SHAP Analysis)", expanded=False):
             with st.spinner("Generating feature impact analysis..."):
@@ -378,85 +376,84 @@ with tab_evidence:
         st.divider()
 
         # --- SECTION 3: INTERACTIVE THRESHOLD ---
-        st.markdown("### 3. Optimal Threshold Selection")
-        st.markdown("*\"Now that we have well-calibrated models, we must select the optimal classification threshold. We will use the **Youden's J statistic** from the test set ROC curve to find the threshold that provides the best balance between sensitivity and specificity.\"*")
+        st.markdown("### 3. Calibration Analysis (Reliability)")
+        st.markdown('''
+        - **The Concept:** A model with high predictive power (ROC AUC) can still be unreliable. For example, if a model predicts a **70% risk** of mortality for 100 patients, we would expect roughly 70 of them to experience the event. However, if 90 or only 30 do, the model would be considered to be uncalibrated and would be unusable for clinical decision-making.
+        - **The Problem:** Random Forest models are ensemble models. They average the predictions of their underlying decision trees, which get pushed towards 0.5, making the model underconfident.
+        - **The Solution:** **Sigmoid Calibration** was applied to calibrate the model. This was chosen over **Isotonic Calibration** due to the low size of the dataset and its suitability for the S-shaped calibration curve of Random Forests. 
+        - **Evaluation:** **Brier Score** (Mean Squared Error of probabilities) was used to measure calibration quality. 
+            - *Lower Brier Score = Better Calibration.*
+        ''')
         
-        if 'X_test' in evidence_data and 'y_test' in evidence_data:
-            X_test = evidence_data['X_test']
-            y_test = evidence_data['y_test']
-            
-            cols_needed = ['age', 'anaemia', 'creatinine_phosphokinase', 'diabetes', 
-                             'ejection_fraction', 'high_blood_pressure', 'platelets', 
-                             'serum_creatinine', 'serum_sodium', 'sex', 'smoking']
+        # Display Calibration Curve
+        col_cal_img, col_cal_metric = st.columns([2, 1])
+        with col_cal_img:
             try:
-                probs = clinical_model.predict_proba(X_test[cols_needed])[:, 1]
+                st.image("reports/figures/calibration_curves_calibrated.png", caption="Reliability Diagram (Isotonic Regression)", use_container_width=True)
+            except:
+                st.warning("Calibration plot not found.")
+        
+        with col_cal_metric:
+            if evidence_data['calibration'] is not None:
+                cal_df = evidence_data['calibration']
+                # Filter for Random Forest
+                rf_row = cal_df[cal_df['model'] == 'RandomForestClassifier'].iloc[0]
                 
-                col_slider, col_metrics = st.columns([1, 2])
-                
-                with col_slider:
-                    st.write("**Adjust Decision Threshold:**")
-                    threshold = st.slider("Threshold", 0.0, 1.0, 0.24, key="thresh_slider",
-                                        help="Lower thresholds catch more cases (higher sensitivity) but increase false alarms.")
-                    y_pred = (probs >= threshold).astype(int)
-                    
-                    # Confusion Matrix
-                    cm = confusion_matrix(y_test, y_pred)
-                    tn, fp, fn, tp = cm.ravel()
-                    
-                    st.write("<b>Confusion Matrix (Test Set)</b>", unsafe_allow_html=True)
-                    st.write(pd.DataFrame(cm, 
-                                        columns=['Pred: Survived', 'Pred: Died'], 
-                                        index=['Actual: Survived', 'Actual: Died']))
+                st.markdown("#### Brier Score Impact")
 
-                with col_metrics:
-                    acc = accuracy_score(y_test, y_pred)
-                    sens = recall_score(y_test, y_pred)
-                    spec = tn / (tn + fp) if (tn + fp) > 0 else 0
-                    youden = sens + spec - 1
-                    
-                    st.markdown("#### Performance Metrics")
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Sensitivity", f"{sens:.1%}", help="True Positive Rate (Recall)")
-                    m2.metric("Specificity", f"{spec:.1%}", help="True Negative Rate")
-                    m3.metric("Accuracy", f"{acc:.1%}")
-                    m4.metric("Youden's J", f"{youden:.2f}")
-                    
-                    if sens > 0.9:
-                        st.caption("✅ High Sensitivity: Good for screening (few missed cases).")
-                    elif spec > 0.9:
-                        st.caption("✅ High Specificity: Good for confirming diagnosis (few false alarms).")
-                        
-            except Exception as e:
-                st.warning(f"Could not compute interactive metrics: {e}")
-        else:
-            st.info("Test data not loaded.")
+                brier_orig, brier_cali = st.columns([1,1])
+
+                with brier_orig:
+                    st.metric("Original Brier Score", f"{rf_row['brier_orig']:.4f}")
+                with brier_cali:
+                    st.metric("Calibrated Brier Score", f"{rf_row['brier_cal']:.4f}", 
+                             delta=f"{rf_row['brier_orig'] - rf_row['brier_cal']:.4f} improvement")
+                st.caption("The calibrated model significantly reduces the error between predicted probability and actual risk.")
 
         st.divider()
 
-        # --- SECTION 4: CALIBRATION ---
-        col_calib, col_shap = st.columns(2)
+        # --- SECTION 4: OPTIMAL THRESHOLD SELECTION ---
+        st.markdown("### 4. Decision Threshold Optimization")
+        st.markdown('''
+        - **The Trade-off:** Standard machine learning models use a default decision threshold of **0.5** (probability > 50% = Death). In a clinical setting with imbalanced data (fewer deaths than survivors), this often results in low Sensitivity (missing high-risk patients).
+        - **Methodology:** We analyzed the ROC Curve to calculate the **Youden’s J Statistic** (*Sensitivity + Specificity - 1*) for every possible threshold. 
+        - **The Result:** The optimal threshold maximizes the vertical distance between the ROC curve and the diagonal chance line, providing the best mathematical balance between catching sick patients (Sensitivity) and avoiding false alarms (Specificity).
+        ''')
+
+        if 'X_test' in evidence_data and 'y_test' in evidence_data:
+             st.info("💡 **Interactive Check:** Use the slider in the dashboard section above to manually test the impact of changing this threshold on the Confusion Matrix.")
+
+        st.divider()
+
+        # --- SECTION 5: FINAL RESULTS (HYPOTHESIS VALIDATION) ---
+        st.markdown("### 5. Final Results & Statistical Significance")
+        st.markdown('''
+        - To rigorously validate the hypothesis, we employed two statistical tests on the incremental models:
+            1. **Likelihood Ratio Test (LRT):** Compares the goodness-of-fit between nested models. It tells us if adding a feature significantly reduces the model's error.
+            2. **DeLong’s Test:** A specialized non-parametric test to compare the AUC of two correlated ROC curves.
         
-        with col_calib:
-            st.markdown("### 4. Calibration Analysis")
-            st.markdown("*\"Predictive accuracy (discrimination) is not enough for a clinical risk model; we also need models that produce reliable probabilities (calibration). A well-calibrated model's predicted probability of 30% should correspond to an event actually occurring ~30% of the time.\"*")
-            st.markdown("We used **Isotonic Regression** to align predicted probabilities. A lower Brier Score indicates better calibration.")
+        - **The Findings (from `final_evaluation_rf.csv`):**
+        ''')
+
+        if evidence_data['final_evaluation'] is not None:
+            # Extract specific rows for narrative
+            df_res = evidence_data['final_evaluation']
             
-            try:
-                st.image("reports/figures/calibration_curves_calibrated.png", use_container_width=True)
-                if evidence_data['calibration'] is not None:
-                    cal_df = evidence_data['calibration']
-                    rf_cal = cal_df[cal_df['model'] == 'RandomForestClassifier'].iloc[0]
-                    st.metric("Brier Score Improvement (RF)", 
-                              f"{rf_cal['brier_orig']:.3f} → {rf_cal['brier_cal']:.3f}",
-                              delta=f"{rf_cal['brier_orig'] - rf_cal['brier_cal']:.3f} (Lower is better)",
-                              delta_color="inverse")
-            except:
-                st.write("Image not found")
-                
-        with col_shap:
-            st.markdown("### 5. Global Feature Importance")
-            st.markdown("Derived from SHAP Summary analysis on the validation cohort. This confirms that **Serum Creatinine** and **Ejection Fraction** are the most impactful features globally, aligning with clinical literature.")
-            try:
-                st.image("reports/figures/numerical_feature_analysis.png", use_container_width=True)
-            except:
-                st.write("Image not found")
+            # 1. Check EF Significance
+            ef_row = df_res[df_res['extended_fs'] == 'ef+cr'] # Assuming this is the step where EF/CR interaction is tested or similar
+            # Note: Adjust logic to match your specific CSV structure. 
+            # Below is a generic display of the final decision table.
+            
+            st.dataframe(
+                df_res[['extended_fs', 'LR_p_value', 'DeLong_p_value', 'DeLong_extended_AUC']].style.format({
+                    'LR_p_value': '{:.4f}',
+                    'DeLong_p_value': '{:.4f}',
+                    'DeLong_extended_AUC': '{:.3f}'
+                }),
+                use_container_width=True
+            )
+            
+            st.markdown('''
+            - **Primary Hypothesis (Supported):** The addition of *Ejection Fraction* and *Serum Creatinine* resulted in p-values **< 0.05** in the Likelihood Ratio tests, confirming they provide statistically significant information gain.
+            - **Secondary Hypothesis (Rejected):** The addition of *Serum Sodium* and *Age Squared* (Non-linear age) yielded p-values **> 0.05**. While they may increase the AUC marginally in the training set, they do not provide statistically significant incremental value over the simpler model in this cohort.
+            ''')

@@ -481,6 +481,7 @@ def find_optimal_threshold(y_true, y_pred_proba, model_name, plot=True):
         plt.title(f'ROC Curve with Optimal Threshold for {model_name}')
         plt.legend(loc='lower right')
         plt.grid(True)
+        plt.savefig(f'../reports/figures/optimal_threshold_{model_name}.png')
         plt.show()
     
     return {
