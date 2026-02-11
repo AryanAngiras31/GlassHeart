@@ -78,7 +78,8 @@ def load_evidence():
     """Loads the CSV tables and validation images for Tab 2"""
     evidence = {}
     try:
-        evidence['ladder'] = pd.read_csv('reports/tables/final_evaluation_rf.csv')
+        evidence['ladder'] = pd.read_csv('reports/tables/ladder_validation_rf.csv')
+        evidence['final_evaluation'] = pd.read_csv('reports/tables/final_evaluation_rf.csv')
         evidence['calibration'] = pd.read_csv('reports/tables/calibration_results.csv')
         evidence['X_test'] = joblib.load('artifacts/splits/x_test.joblib')
         evidence['y_test'] = joblib.load('artifacts/splits/y_test.joblib')
@@ -301,19 +302,34 @@ with tab_evidence:
     else:
         # --- SECTION 1: THE VERDICT ---
         st.markdown("### 1. The Verdict: Hypothesis Testing")
-        st.markdown(
-            """
-            <div class="verdict-box">
-                <div class="verdict-title">Statistical Conclusions</div>
-                • <b>Primary Hypothesis (Supported):</b> Lower ejection fraction and higher serum creatinine are dominant predictors. Adding EF to the baseline model yielded a statistically significant improvement (p < 0.01).<br>
-                • <b>Secondary Hypothesis (Not Supported):</b> Serum sodium and age nonlinearity did not provide independent incremental value. Likelihood Ratio Tests suggest the improvement was not statistically significant (p > 0.05).
-            </div>
-            """, unsafe_allow_html=True
+        st.markdown('''
+            - The primary goal of this project was not to build a **Clinical Decision Support System** but rather was to validate the following hypothesis:\n
+            '**"Lower ejection fraction and higher serum creatinine are dominant predictors of mortality; serum sodium and age nonlinearity provide independent incremental value"**'
+            - The project was an exploration of this hypothesis. The _Triage_ and _Clinical_ models were developed during the deployment of this dashboard.
+            To ensure a rigorous validation process, a series of statistical tests and methodologies were employed. They are explained as follows: '''
         )
+
 
         # --- SECTION 2: AUC STEP-UP CHART (MATPLOTLIB) ---
         st.markdown("### 2. Feature Ladder (Incremental Value)")
-        st.markdown("We re-trained the model on progressively larger feature sets. This chart visualizes the **AUC Gain** at each step, coloring bars by statistical significance (Green = Significant, Grey = Not Significant).")
+        st.markdown('''
+        - A mutual information test was performed to capture linear and non-linear dependencies between the features and the target variable.
+        - The features 'smoking', 'high_blood_pressure', 'diabetes', 'anaemia' were found to have almost no relation to the target variable and were dropped.
+        - Then the remaining features were compiled into the following feature sets in the form of a feature ladder:
+
+        ```
+        baseline_fs = ['age', 'sex', 'creatinine_phosphokinase', 'platelets']
+        ef_fs = baseline_fs + ['ejection_fraction']
+        creatinine_fs = baseline_fs + ['serum_creatinine']
+        ef_creatinine_fs = baseline_fs + ['ejection_fraction'] + ['serum_creatinine']
+        ef_creatinine_sodium_fs = ef_creatinine_fs + ['serum_sodium']
+        ef_creatinine_age_squared_fs = ef_creatinine_fs + ['age_squared']
+        ef_creatinine_sodium_age_squared_fs =  ef_creatinine_fs + ['serum_sodium'] + ['age_squared']
+        ```
+        
+        - The ROC AUC score was calculated for each of the feature sets and is shown in the feature ladder chart below. 
+        - A clear bump in the performance of the model is seen when adding 'ejection_fraction' to the feature set. 
+        ''')
         
         ladder_df = evidence_data['ladder'].copy()
         
@@ -323,18 +339,15 @@ with tab_evidence:
         
         fig, ax = plt.subplots(figsize=(10, 4))
         
-        # Color logic
-        colors = ['#10b981' if p < 0.05 else '#6b7280' for p in ladder_df['LR_p_value']]
-        
         # Plot
-        bars = ax.bar(ladder_df['extended_fs'], ladder_df['DeLong_extended_AUC'], color=colors, edgecolor='white', linewidth=0.5)
+        bars = ax.bar(ladder_df['feature_set'], ladder_df['roc_auc'], color='skyblue', edgecolor='white', linewidth=0.5)
         
         # Styling
         plt.style.use("dark_background")
-        ax.set_ylim(0.5, 0.95)
+        ax.set_ylim(0.45, 0.90)
         ax.set_ylabel("ROC AUC Score", color="#e5e7eb", fontsize=10)
-        ax.set_xlabel("Feature Set Added", color="#e5e7eb", fontsize=10)
-        ax.set_title("Model Performance Step-Up", color="white", fontsize=12, pad=15)
+        ax.set_xlabel("Feature Set", color="#e5e7eb", fontsize=10)
+        ax.set_title("Feature Ladder Performance", color="white", fontsize=12, pad=15)
         
         # Axis colors
         ax.tick_params(axis='x', colors='#d1d5db', rotation=0)
