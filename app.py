@@ -299,9 +299,10 @@ with tab_dashboard:
         # --- NEW: Medical Disclaimer ---
         st.warning("""
         **⚠️ DISCLAIMER: RESEARCH PROTOTYPE ONLY**
-        
+
         - This application is a Clinical Decision Support System (CDSS) prototype designed for **educational and research purposes**. 
         The risk estimates provided are based on historical data patterns and **must not** be interpreted as a definitive medical prognosis.
+
         
         - This tool should **not** be used as a substitute for professional medical judgment, diagnosis, or treatment. 
         Always adhere to standard clinical guidelines and institutional protocols.
